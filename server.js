@@ -1,9 +1,10 @@
+require("dotenv").config()
 const express = require("express")
 const mongoose = require("mongoose")
 const cors = require("cors")
 const http = require("http")
 
-require("dotenv").config()
+// require("dotenv").config()
 
 const app = express()
 const server = http.createServer(app)
@@ -21,7 +22,7 @@ mongoose
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use("/api/auth", require("./routes/auth"))
-
+app.use("/api/dashboard", require("./routes/dashboard"))
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
@@ -32,8 +33,8 @@ app.use((err, req, res, next) => {
   })
 })
 
-
 const PORT = process.env.PORT || 5000
 server.listen(PORT, () => {
   console.log(`Vezoh Backend Server running on port ${PORT}`)
 })
+//server.js
