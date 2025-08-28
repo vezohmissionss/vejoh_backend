@@ -7,6 +7,7 @@ const User = require("../models/user")
 const Driver = require("../models/driver")
 const { auth } = require("../middleware/auth")
 const { generateOTP, formatPhoneNumber, isValidEmail, isValidPhone } = require("../utils/helpers")
+const { sendEmailVerificationOTP, sendPasswordResetOTP } = require("../utils/emailService")
 
 const router = express.Router()
 
@@ -37,86 +38,12 @@ const generateToken = (id, role) => {
   })
 }
 
-const sendOTP = async (phone, otp) => {
-  try {
-    const client = initializeTwilio()
-
-    if (!client || !process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER === "your_twilio_phone") {
-      console.log(`[MOCK SMS] OTP ${otp} would be sent to ${phone} (Twilio not configured)`)
-      return true
-    }
-
-    const message = await client.messages.create({
-      body: `Your Vezoh verification code is: ${otp}. This code will expire in 10 minutes.`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: phone,
-    })
-
-    console.log(`SMS sent successfully to ${phone}. Message SID: ${message.sid}`)
-    return true
-  } catch (error) {
-    console.error(`Failed to send SMS to ${phone}:`, error.message)
-    console.log(`[FALLBACK] OTP for ${phone}: ${otp}`)
-    return false
-  }
-}
-
-const sendEmailOTP = async (email, otp, name) => {
-  try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.log(`[MOCK EMAIL] OTP ${otp} would be sent to ${email} (Email not configured)`)
-      return false
-    }
-
-    console.log(`[DEBUG] Attempting to send email to: ${email}`)
-    console.log(`[DEBUG] Using email user: ${process.env.EMAIL_USER}`)
-
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    })
-
-    await transporter.verify()
-    console.log("[DEBUG] Email transporter verified successfully")
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Vezoh Email Verification OTP",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Email Verification</h2>
-          <p>Hello ${name},</p>
-          <p>Your Vezoh email verification OTP is:</p>
-          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-            <h1 style="color: #007bff; font-size: 32px; margin: 0;">${otp}</h1>
-          </div>
-          <p>This code will expire in 10 minutes.</p>
-          <p>If you didn't request this verification, please ignore this email.</p>
-          <p>Thank you,<br>Vezoh Team</p>
-        </div>
-      `,
-      text: `Hello ${name},\n\nYour Vezoh email verification OTP is: ${otp}\n\nThis code will expire in 10 minutes.\n\nThank you,\nVezoh Team`,
-    }
-
-    const info = await transporter.sendMail(mailOptions)
-    console.log(`[SUCCESS] Email sent successfully to ${email}. Message ID: ${info.messageId}`)
-    return true
-  } catch (error) {
-    console.error(`[ERROR] Failed to send email to ${email}:`, error.message)
-    console.log(`[FALLBACK] OTP for ${email}: ${otp}`)
-    return false
-  }
-}
-
 
 router.post("/register/user", async (req, res) => {
   try {
     const { name, email, phone, password } = req.body
 
+    // Validation
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
         success: false,
@@ -147,6 +74,7 @@ router.post("/register/user", async (req, res) => {
 
     const formattedPhone = formatPhoneNumber(phone)
 
+    // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email: email.toLowerCase() }, { phone: formattedPhone }],
     })
@@ -165,6 +93,7 @@ router.post("/register/user", async (req, res) => {
     // Generate OTP
     const otp = generateOTP()
 
+    // Create user
     const user = new User({
       name: name.trim(),
       email: email.toLowerCase(),
@@ -175,23 +104,23 @@ router.post("/register/user", async (req, res) => {
 
     await user.save()
 
-    const emailSent = await sendEmailOTP(user.email, otp, user.name)
-    
+    const emailSent = await sendEmailVerificationOTP(user.email, otp, user.name)
+
     if (!emailSent) {
       console.log(`[WARNING] Email failed to send, but user created. OTP: ${otp}`)
     }
 
+    // Generate token
     const token = generateToken(user._id, "user")
 
     res.status(201).json({
       success: true,
-      message: emailSent 
-        ? "User registered successfully. Please check your email for the verification code." 
+      message: emailSent
+        ? "User registered successfully. Please check your email for the verification code."
         : "User registered successfully. Please check server logs for the verification code.",
-           id: user._id,
-           role: "user",
-           token : token,
-    
+      id: user._id,
+      role: "user",
+      token: token,
     })
   } catch (error) {
     console.error("User registration error:", error)
@@ -207,6 +136,7 @@ router.post("/register/driver", async (req, res) => {
   try {
     const { name, email, phone, password } = req.body
 
+    // Validation - exactly same as user registration
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
         success: false,
@@ -237,6 +167,7 @@ router.post("/register/driver", async (req, res) => {
 
     const formattedPhone = formatPhoneNumber(phone)
 
+    // Check if driver already exists
     const existingDriver = await Driver.findOne({
       $or: [{ email: email.toLowerCase() }, { phone: formattedPhone }],
     })
@@ -248,9 +179,11 @@ router.post("/register/driver", async (req, res) => {
       })
     }
 
+    // Hash password
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(password, salt)
 
+    // Generate OTP for email verification
     const otp = generateOTP()
 
     const driver = new Driver({
@@ -264,22 +197,23 @@ router.post("/register/driver", async (req, res) => {
 
     await driver.save()
 
-    const emailSent = await sendEmailOTP(driver.email, otp, driver.name)
-    
+    const emailSent = await sendEmailVerificationOTP(driver.email, otp, driver.name)
+
     if (!emailSent) {
       console.log(`[WARNING] Email failed to send, but driver created. OTP: ${otp}`)
     }
 
+    // Generate token
     const token = generateToken(driver._id, "driver")
 
     res.status(201).json({
       success: true,
-      message: emailSent 
-        ? "Driver registered successfully. Please check your email for the verification code." 
+      message: emailSent
+        ? "Driver registered successfully. Please check your email for the verification code."
         : "Driver registered successfully. Please check server logs for the verification code.",
-         id: driver._id,
-         role:"driver",
-         token: token,
+      id: driver._id,
+      role: "driver",
+      token: token,
     })
   } catch (error) {
     console.error("Driver registration error:", error)
@@ -291,9 +225,10 @@ router.post("/register/driver", async (req, res) => {
 })
 
 
-router.post("/verify-email-otp", async (req, res) => {
+router.post("/verify-email-otp", auth, async (req, res) => {
   try {
-    const { email, otp, role } = req.body
+    const { email, otp } = req.body
+    const role = req.role // Extract role from JWT token via auth middleware
 
     if (!email || !otp) {
       return res.status(400).json({
@@ -302,36 +237,20 @@ router.post("/verify-email-otp", async (req, res) => {
       })
     }
 
-    if (role && !["user", "driver"].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user type. Must be 'user' or 'driver'",
-      })
-    }
-
-    let user = null
-    let foundUserType = null
-
-    if (role) {
-      const Model = role === "user" ? User : Driver
-      user = await Model.findOne({ email: email.toLowerCase() })
-      foundUserType = role
-    } else {
-      user = await User.findOne({ email: email.toLowerCase() })
-      if (user) {
-        foundUserType = "user"
-      } else {
-        user = await Driver.findOne({ email: email.toLowerCase() })
-        if (user) {
-          foundUserType = "driver"
-        }
-      }
-    }
+    const Model = role === "user" ? User : Driver
+    const user = await Model.findById(req.user._id)
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found with this email address",
+        message: "User not found",
+      })
+    }
+
+    if (user.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email does not match the authenticated user",
       })
     }
 
@@ -368,7 +287,7 @@ router.post("/verify-email-otp", async (req, res) => {
     user.otpExpiry = null
     await user.save()
 
-    const token = generateToken(user._id, foundUserType)
+    const token = generateToken(user._id, role)
 
     console.log("[SUCCESS] Email verification successful for:", email)
 
@@ -376,9 +295,9 @@ router.post("/verify-email-otp", async (req, res) => {
       success: true,
       message: "Email verified successfully",
       id: user._id,
-      role: foundUserType,
+      role: role,
       isVerified: true,
-      token: token
+      token: token,
     })
   } catch (error) {
     console.error("Email OTP verification error:", error)
@@ -390,31 +309,32 @@ router.post("/verify-email-otp", async (req, res) => {
 })
 
 
-router.post("/resend-email-otp", async (req, res) => {
+router.post("/resend-email-otp", auth, async (req, res) => {
   try {
-    const { email, role } = req.body
+    const { email } = req.body
+    const role = req.role // Extract role from JWT token via auth middleware
 
-    if (!email || !role) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and user type",
-      })
-    }
-
-    if (!["user", "driver"].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user type. Must be 'user' or 'driver'",
+        message: "Please provide email",
       })
     }
 
     const Model = role === "user" ? User : Driver
-    const user = await Model.findOne({ email: email.toLowerCase() })
+    const user = await Model.findById(req.user._id)
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found with this email address",
+        message: "User not found",
+      })
+    }
+
+    if (user.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email does not match the authenticated user",
       })
     }
 
@@ -425,18 +345,17 @@ router.post("/resend-email-otp", async (req, res) => {
       })
     }
 
+    // Generate new OTP
     const otp = generateOTP()
     user.verificationCode = otp
     user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes expiry
     await user.save()
 
-    const emailSent = await sendEmailOTP(user.email, otp, user.name)
+    const emailSent = await sendEmailVerificationOTP(user.email, otp, user.name)
 
     res.json({
       success: true,
-      message: emailSent 
-        ? "OTP sent successfully to your email" 
-        : "OTP generated. Please check server logs.",
+      message: emailSent ? "OTP sent successfully to your email" : "OTP generated. Please check server logs.",
     })
   } catch (error) {
     console.error("Resend email OTP error:", error)
@@ -447,10 +366,12 @@ router.post("/resend-email-otp", async (req, res) => {
   }
 })
 
+
 router.post("/login/user", async (req, res) => {
   try {
     const { identifier, password } = req.body
 
+    // Validation
     if (!identifier || !password) {
       return res.status(400).json({
         success: false,
@@ -458,6 +379,7 @@ router.post("/login/user", async (req, res) => {
       })
     }
 
+    // Find user by email or phone
     const user = await User.findOne({
       $or: [{ email: identifier.toLowerCase() }, { phone: formatPhoneNumber(identifier) }],
     })
@@ -469,6 +391,7 @@ router.post("/login/user", async (req, res) => {
       })
     }
 
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
       return res.status(400).json({
@@ -477,6 +400,7 @@ router.post("/login/user", async (req, res) => {
       })
     }
 
+    // Check if user is active
     if (user.status !== "active") {
       return res.status(400).json({
         success: false,
@@ -484,6 +408,7 @@ router.post("/login/user", async (req, res) => {
       })
     }
 
+    // Generate token
     const token = generateToken(user._id, "user")
 
     res.json({
@@ -491,7 +416,7 @@ router.post("/login/user", async (req, res) => {
       message: "Login successful",
       id: user._id,
       role: "user",
-      token : token
+      token: token,
     })
   } catch (error) {
     console.error("User login error:", error)
@@ -502,9 +427,10 @@ router.post("/login/user", async (req, res) => {
   }
 })
 
+
 router.post("/forgot-password", async (req, res) => {
   try {
-    const { email, role } = req.body
+    const { email } = req.body
 
     if (!email) {
       return res.status(400).json({
@@ -520,29 +446,16 @@ router.post("/forgot-password", async (req, res) => {
       })
     }
 
-    if (role && !["user", "driver"].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user type. Must be 'user' or 'driver'",
-      })
-    }
-
     let user = null
     let foundUserType = null
 
-    if (role) {
-    const Model = role === "user" ? User : Driver
-      user = await Model.findOne({ email: email.toLowerCase() })
-      foundUserType = role
+    user = await User.findOne({ email: email.toLowerCase() })
+    if (user) {
+      foundUserType = "user"
     } else {
-      user = await User.findOne({ email: email.toLowerCase() })
+      user = await Driver.findOne({ email: email.toLowerCase() })
       if (user) {
-        foundUserType = "user"
-      } else {
-        user = await Driver.findOne({ email: email.toLowerCase() })
-        if (user) {
-          foundUserType = "driver"
-        }
+        foundUserType = "driver"
       }
     }
 
@@ -553,18 +466,19 @@ router.post("/forgot-password", async (req, res) => {
       })
     }
 
+    // Generate OTP for password reset
     const otp = generateOTP()
     user.verificationCode = otp
     user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes expiry
     await user.save()
 
-    await sendEmailOTP(user.email, otp, user.name)
+    await sendPasswordResetOTP(user.email, otp, user.name)
 
     res.json({
       success: true,
       message: "Password reset OTP sent to your email address",
       data: {
-        email: user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3"), 
+        email: user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3"), // Mask email
         role: foundUserType,
       },
     })
@@ -577,14 +491,15 @@ router.post("/forgot-password", async (req, res) => {
   }
 })
 
+
 router.post("/reset-password", async (req, res) => {
   try {
-    const { email, otp, newPassword, role } = req.body
+    const { email, otp, newPassword } = req.body
 
-    if (!email || !otp || !newPassword || !role) {
+    if (!email || !otp || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: "Please provide all required fields",
+        message: "Please provide email, OTP, and new password",
       })
     }
 
@@ -602,15 +517,20 @@ router.post("/reset-password", async (req, res) => {
       })
     }
 
-    if (!["user", "driver"].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user type",
-      })
-    }
+    let user = null
+    let role = null
 
-    const Model = role === "user" ? User : Driver
-    const user = await Model.findOne({ email: email.toLowerCase() })
+    // Check User collection first
+    user = await User.findOne({ email: email.toLowerCase() })
+    if (user) {
+      role = "user"
+    } else {
+      // Check Driver collection
+      user = await Driver.findOne({ email: email.toLowerCase() })
+      if (user) {
+        role = "driver"
+      }
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -633,9 +553,11 @@ router.post("/reset-password", async (req, res) => {
       })
     }
 
+    // Hash new password
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(newPassword, salt)
 
+    // Update password and clear OTP
     user.password = hashedPassword
     user.verificationCode = null
     user.otpExpiry = null
@@ -644,6 +566,7 @@ router.post("/reset-password", async (req, res) => {
     res.json({
       success: true,
       message: "Password reset successfully",
+      role: role, // Return detected user type for frontend reference
     })
   } catch (error) {
     console.error("Reset password error:", error)
@@ -653,6 +576,7 @@ router.post("/reset-password", async (req, res) => {
     })
   }
 })
+
 
 router.post("/change-password", auth, async (req, res) => {
   try {
@@ -682,6 +606,7 @@ router.post("/change-password", auth, async (req, res) => {
       })
     }
 
+    // Check current password
     const isMatch = await bcrypt.compare(currentPassword, user.password)
     if (!isMatch) {
       return res.status(400).json({
@@ -690,9 +615,11 @@ router.post("/change-password", auth, async (req, res) => {
       })
     }
 
+    // Hash new password
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(newPassword, salt)
 
+    // Update password
     user.password = hashedPassword
     await user.save()
 
@@ -714,6 +641,7 @@ router.post("/login/driver", async (req, res) => {
   try {
     const { identifier, password } = req.body
 
+    // Validation
     if (!identifier || !password) {
       return res.status(400).json({
         success: false,
@@ -721,6 +649,7 @@ router.post("/login/driver", async (req, res) => {
       })
     }
 
+    // Find driver by email or phone
     const driver = await Driver.findOne({
       $or: [{ email: identifier.toLowerCase() }, { phone: formatPhoneNumber(identifier) }],
     })
@@ -732,6 +661,7 @@ router.post("/login/driver", async (req, res) => {
       })
     }
 
+    // Check password
     const isMatch = await bcrypt.compare(password, driver.password)
     if (!isMatch) {
       return res.status(400).json({
@@ -740,6 +670,7 @@ router.post("/login/driver", async (req, res) => {
       })
     }
 
+    // Generate token
     const token = generateToken(driver._id, "driver")
 
     res.json({
@@ -757,6 +688,7 @@ router.post("/login/driver", async (req, res) => {
     })
   }
 })
+
 
 router.get("/profile", auth, async (req, res) => {
   try {
@@ -786,9 +718,9 @@ router.get("/profile", auth, async (req, res) => {
   }
 })
 
+
 router.post("/logout", auth, async (req, res) => {
   try {
-
     res.json({
       success: true,
       message: "Logged out successfully",
@@ -803,3 +735,4 @@ router.post("/logout", auth, async (req, res) => {
 })
 
 module.exports = router
+

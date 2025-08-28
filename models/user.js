@@ -93,8 +93,6 @@ const userSchema = new mongoose.Schema(
   },
 )
 
-userSchema.index({ email: 1 })
-userSchema.index({ phone: 1 })
 userSchema.index({ "addresses.coordinates": "2dsphere" })
 
 module.exports = mongoose.model("User", userSchema)
