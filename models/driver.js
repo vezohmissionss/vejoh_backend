@@ -18,11 +18,6 @@ const driverSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-    },
     profileImage: {
       type: String,
       default: null,

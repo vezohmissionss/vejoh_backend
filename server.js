@@ -18,7 +18,7 @@ mongoose
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use("/api/auth", require("./routes/auth"))
-app.use("/api/dashboard", require("./routes/dashboard"))
+//app.use("/api/dashboard", require("./routes/dashboard"))
 app.use("/api/location", require("./routes/location.js"))
 app.use("/api/driver", require("./routes/driver.js"))
 
