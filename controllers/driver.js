@@ -1,14 +1,37 @@
-let Ride = require("../models/ride.js");
+// let Ride = require("../models/ride.js");
+let Driver = require("../models/driver.js");
 
-exports.createRide = async (req, res) => {
+exports.statusUpdate = async (req, res) => {
   try {
-    // req.body.seatsAvailable = 4; // default
-    // req.body.driver = req.user._id;
-    const createdRide = await Ride.create(req.body);
+    const { action, lat, lon } = req.body;
+
+    let status;
+    switch (+action) {
+      case 0:
+        status = "offline";
+        break;
+      case 1:
+        status = "online";
+        break;
+    }
+
+    const updateLocation = await Driver.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          "location.coordinates": {
+            latitude: lat,
+            longitude: lon,
+          },
+          status: status,
+        },
+      },
+      { new: true }
+    );
     return res.status(201).json({
       success: true,
-      message: "Ride Created Successfully",
-      data: createdRide,
+      message: "Status updated successfully",
+      // data: updateLocation,
     });
   } catch (err) {
     return res.status(500).json({
