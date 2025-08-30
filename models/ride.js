@@ -1,13 +1,12 @@
-
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
 const rideSchema = new mongoose.Schema(
   {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
+    // user: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "User",
+    //   required: true,
+    // }, // I think no need to mention
     driver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Driver",
@@ -37,6 +36,7 @@ const rideSchema = new mongoose.Schema(
       enum: ["bike", "auto", "car", "truck"],
       required: true,
     },
+    seatsAvailable: { type: Number, required: true },
     fare: {
       estimated: Number,
       offered: Number,
@@ -52,7 +52,15 @@ const rideSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["requested", "accepted", "driver_assigned", "pickup", "in_progress", "completed", "cancelled"],
+      enum: [
+        "requested",
+        "accepted",
+        "driver_assigned",
+        "pickup",
+        "in_progress",
+        "completed",
+        "cancelled",
+      ],
       default: "requested",
     },
     paymentMethod: {
@@ -83,13 +91,13 @@ const rideSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
-)
+  }
+);
 
-rideSchema.index({ user: 1 })
-rideSchema.index({ driver: 1 })
-rideSchema.index({ status: 1 })
-rideSchema.index({ "pickup.coordinates": "2dsphere" })
-rideSchema.index({ "destination.coordinates": "2dsphere" })
+rideSchema.index({ user: 1 });
+rideSchema.index({ driver: 1 });
+rideSchema.index({ status: 1 });
+rideSchema.index({ "pickup.coordinates": "2dsphere" });
+rideSchema.index({ "destination.coordinates": "2dsphere" });
 
-module.exports = mongoose.model("Ride", rideSchema)
+module.exports = mongoose.model("Ride", rideSchema);

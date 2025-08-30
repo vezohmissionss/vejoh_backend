@@ -23,6 +23,8 @@ mongoose
 
 app.use("/api/auth", require("./routes/auth"))
 app.use("/api/dashboard", require("./routes/dashboard"))
+app.use("/api/location", require("./routes/location.js"))
+app.use("/api/driver", require("./routes/driver.js"))
 
 app.use((err, req, res, next) => {
   console.error(err.stack)

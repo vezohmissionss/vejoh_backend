@@ -11,7 +11,7 @@ const GoogleMapsService = require("../utils/googleMapsService")
 // @access  Private
 router.get("/locations/search", auth, async (req, res) => {
   try {
-    const { query, lat, lng } = req.query
+    const { query } = req.query
 
     if (!query) {
       return res.status(400).json({
