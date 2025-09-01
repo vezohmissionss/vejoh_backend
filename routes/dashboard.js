@@ -95,7 +95,7 @@
 //       })
 //     }
 
-//     console.log(`🚗 Distance calculation (${mode}): (${origin.lat}, ${origin.lng}) → (${destination.lat}, ${destination.lng})`)
+//     console.log(`Distance calculation (${mode}): (${origin.lat}, ${origin.lng}) → (${destination.lat}, ${destination.lng})`)
 
 //     const distanceResult = await GoogleMapsService.calculateDistance(origin, destination, mode)
 
@@ -415,9 +415,8 @@ const Driver = require("../models/driver")
 const Ride = require("../models/ride")
 const GoogleMapsService = require("../utils/googleMapsService")
 
-// @route   GET /api/dashboard/locations/autocomplete
-// @desc    Places API - Get autocomplete suggestions for places
-// @access  Private
+//  Places API - Get autocomplete suggestions for places
+
 router.get("/locations/autocomplete", auth, async (req, res) => {
   try {
     const { input, sessionToken, lat, lng } = req.query
@@ -446,9 +445,8 @@ router.get("/locations/autocomplete", auth, async (req, res) => {
   }
 })
 
-// @route   POST /api/dashboard/locations/geocode
-// @desc    Geocoding API - Smart endpoint: address ↔ coordinates conversion
-// @access  Private
+//Geocoding API - Smart endpoint: address ↔ coordinates conversion
+
 router.post("/locations/geocode", auth, async (req, res) => {
   try {
     const { address, latitude, longitude } = req.body
@@ -486,9 +484,8 @@ router.post("/locations/geocode", auth, async (req, res) => {
   }
 })
 
-// @route   POST /api/dashboard/locations/distance
-// @desc    Distance Matrix API - Calculate distance and ETA between points
-// @access  Private
+// Distance Matrix API - Calculate distance and ETA between points
+
 router.post("/locations/distance", auth, async (req, res) => {
   try {
     const { origin, destination, mode = "driving" } = req.body
@@ -515,9 +512,8 @@ router.post("/locations/distance", auth, async (req, res) => {
   }
 })
 
-// @route   POST /api/dashboard/drivers/nearby
-// @desc    Find nearby available drivers with accurate Google Maps distance/ETA
-// @access  Private
+// Find nearby available drivers with accurate Google Maps distance/ETA
+
 router.post("/drivers/nearby", auth, async (req, res) => {
   try {
     const { latitude, longitude, vehicleType, serviceType = "ride", radius = 5000 } = req.body
@@ -649,9 +645,9 @@ router.post("/drivers/nearby", auth, async (req, res) => {
   }
 })
 
-// @route   POST /api/dashboard/rides/request
-// @desc    Request a ride with REAL Google Maps distance and fare calculation
-// @access  Private
+
+//Request a ride with REAL Google Maps distance and fare calculation
+
 router.post("/rides/request", auth, async (req, res) => {
   try {
     const { pickup, destination, vehicleType, serviceType = "ride", offeredFare, paymentMethod = "cash" } = req.body
@@ -742,9 +738,8 @@ router.post("/rides/request", auth, async (req, res) => {
   }
 })
 
-// @route   GET /api/dashboard/rides/active
-// @desc    Get user's active rides
-// @access  Private
+// Get user's active rides
+
 router.get("/rides/active", auth, async (req, res) => {
   try {
     const activeRides = await Ride.find({

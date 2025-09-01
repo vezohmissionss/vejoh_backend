@@ -3,7 +3,6 @@ const { auth } = require("../middleware/auth")
 const authController = require("../controllers/authController")
 const DriverController = require("../controllers/driverController")
 
-// ✅ import upload middleware
 const { allDocuments } = require("../middleware/upload")
 
 const router = express.Router()
@@ -25,10 +24,6 @@ router.get("/profile", auth, authController.getProfile)
 router.post("/logout", auth, authController.logout)
 
 // Driver verification submit
-
-
 router.post('/driver/submit', auth, allDocuments, DriverController.submitForVerification);
-
-
 
 module.exports = router

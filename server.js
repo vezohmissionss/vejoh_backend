@@ -1,8 +1,14 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') }); 
+
+console.log('MONGO_URI:', process.env.MONGO_URI); 
+
+
 const express = require("express")
+
 const mongoose = require("mongoose")
 const cors = require("cors")
 const http = require("http")
-require("./cron/autoApprove"); // add this line at the top
 
 
 const authRoutes = require('./routes/auth');

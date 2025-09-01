@@ -3,10 +3,8 @@ const Driver = require('../models/driver');
 const { validationResult } = require('express-validator');
 
 class DriverController {
-  // SINGLE API: Submit services + vehicle + documents for verification
   async submitForVerification(req, res) {
     try {
-      // Validate request body
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -172,49 +170,6 @@ class DriverController {
       res.status(500).json({
         success: false,
         message: 'Submission failed'
-      });
-    }
-  }
-
-  // Get registration status
-  async getRegistrationStatus(req, res) {
-    try {
-      const driver = await Driver.findById(req.user._id)
-        .select('-password -verificationCode -__v');
-
-      if (!driver) {
-        return res.status(404).json({
-          success: false,
-          message: 'Driver not found'
-        });
-      }
-
-      const completionSteps = {
-        basic_info: 25,
-        service_selection: 50,
-        vehicle_registration: 75,
-        completed: 100
-      };
-      const completionPercentage = completionSteps[driver.registrationStep] || 0;
-
-      res.json({
-        success: true,
-        data: {
-          driver,
-          completionPercentage,
-          nextStep: this.getNextStep(driver.registrationStep, driver.verificationStatus),
-          canSubmit:
-            driver.isVerified &&
-            driver.verificationStatus !== 'under_review' &&
-            driver.verificationStatus !== 'approved'
-        }
-      });
-
-    } catch (error) {
-      console.error('Get status error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to get registration status'
       });
     }
   }
