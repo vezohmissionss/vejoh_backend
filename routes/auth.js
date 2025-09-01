@@ -1,7 +1,6 @@
 const express = require("express")
 const { auth } = require("../middleware/auth")
 const authController = require("../controllers/authController")
-const DriverController = require("../controllers/driverController")
 
 const { allDocuments } = require("../middleware/upload")
 
@@ -9,7 +8,6 @@ const router = express.Router()
 
 // Registration
 router.post("/register/user", authController.registerUser)
-router.post("/register/driver", authController.registerDriver)
 
 // Email verification
 router.post("/verify-email-otp", auth, authController.verifyEmailOtp)
@@ -24,6 +22,6 @@ router.get("/profile", auth, authController.getProfile)
 router.post("/logout", auth, authController.logout)
 
 // Driver verification submit
-router.post('/driver/submit', auth, allDocuments, DriverController.submitForVerification);
+router.post("/register/driver/complete", allDocuments, authController.registerDriverComplete);
 
 module.exports = router

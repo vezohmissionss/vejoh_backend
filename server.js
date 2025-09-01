@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') }); 
 
-console.log('MONGO_URI:', process.env.MONGO_URI); 
+
 
 
 const express = require("express")
@@ -20,7 +20,6 @@ const server = http.createServer(app)
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-app.use('/api/auth', authRoutes);
 
 
 mongoose
@@ -29,6 +28,7 @@ mongoose
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use("/api/auth", require("./routes/auth"))
+app.use('/api', authRoutes); 
 app.use("/api/dashboard", require("./routes/dashboard"))
 
 app.use((err, req, res, next) => {
