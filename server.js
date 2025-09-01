@@ -2,7 +2,10 @@ const express = require("express")
 const mongoose = require("mongoose")
 const cors = require("cors")
 const http = require("http")
+require("./cron/autoApprove"); // add this line at the top
 
+
+const authRoutes = require('./routes/auth');
 require("dotenv").config()
 
 const app = express()
@@ -11,6 +14,8 @@ const server = http.createServer(app)
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+app.use('/api/auth', authRoutes);
+
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -18,7 +23,7 @@ mongoose
   .catch((err) => console.log("MongoDB connection error:", err))
 
 app.use("/api/auth", require("./routes/auth"))
-//app.use("/api/dashboard", require("./routes/dashboard"))
+app.use("/api/dashboard", require("./routes/dashboard"))
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
