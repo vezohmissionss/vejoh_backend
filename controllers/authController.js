@@ -61,231 +61,169 @@ exports.registerUser = async (req, res) => {
 // Register Driver
 exports.registerDriverComplete = async (req, res) => {
   try {
+    const {
+      name,
+      email,
+      phone,
+      services,
+      vehicleType,
+      vehicleNumber,
+      ownerName
+    } = req.body;
 
-
-    const { name, email, phone } = req.body
-    
-    // Step 2: Validate basic required fields
     if (!name || !email || !phone) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Please provide all required fields (name, email, phone)" 
-      })
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields (name, email, phone)"
+      });
     }
-    
+
     if (!isValidEmail(email)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Please provide a valid email address" 
-      })
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid email address"
+      });
     }
-    
+
     if (!isValidPhone(phone)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Please provide a valid phone number" 
-      })
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid phone number"
+      });
     }
 
-    // Step 3: Check for existing driver
     const formattedPhone = formatPhoneNumber(phone)
-    const existingDriver = await Driver.findOne({ 
-      $or: [{ email: email.toLowerCase() }, { phone: formattedPhone }] 
+    const existingDriver = await Driver.findOne({
+      $or: [{ email: email.toLowerCase() }, { phone: formattedPhone }]
     })
-    
+
     if (existingDriver) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Driver already exists with this email or phone number" 
+      return res.status(400).json({
+        success: false,
+        message: "Driver already exists with this email or phone number"
       })
     }
 
-    // Step 4: Parse and validate services
-    let services;
+    let parsedServices;
     try {
-      services = typeof req.body.services === 'string'
-        ? JSON.parse(req.body.services)
-        : req.body.services;
-      if (!Array.isArray(services) || services.length === 0) {
+      parsedServices = typeof services === 'string' ? JSON.parse(services) : services;
+      if (!Array.isArray(parsedServices) || parsedServices.length === 0) {
         throw new Error('Services must be a non-empty array');
       }
     } catch {
       return res.status(400).json({
         success: false,
-        message: 'Invalid services format. Should be a non-empty JSON array.'
+        message: 'Please select at least one service'
       });
     }
 
-    // Step 5: Validate vehicle information
-    const requiredVehicleFields = ['vehicleType', 'vehicleMake', 'vehicleModel', 'vehicleColor', 'plateNumber'];
-    const missingVehicleFields = requiredVehicleFields.filter(field => !req.body[field]);
-    
-    if (missingVehicleFields.length > 0) {
+    if (!vehicleType || !vehicleNumber || !ownerName) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required vehicle information',
-        missingFields: missingVehicleFields
+        message: 'Please provide vehicle type, vehicle number, and owner name'
       });
     }
 
-    // Step 6: Validate required documents
-    const requiredDocumentFields = [
-      'drivingLicenseNumber', 'vehicleRegistrationNumber', 
-      'insuranceNumber', 'aadharNumber'
-    ];
-    const missingDocumentFields = requiredDocumentFields.filter(field => !req.body[field]);
-    
-    if (missingDocumentFields.length > 0) {
+    const existingVehicle = await Driver.findOne({
+      'vehicle.number': vehicleNumber.toUpperCase()
+    });
+
+    if (existingVehicle) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required document information',
-        missingFields: missingDocumentFields
+        message: 'Vehicle with this number is already registered'
       });
     }
 
-    // Step 7: Check required document uploads
     const requiredFiles = [
-      'drivingLicenseFront', 'drivingLicenseBack', 
-      'vehicleRegistrationImage', 'insuranceImage',
-      'aadharFront', 'aadharBack'
+      'drivingLicense',
+      'rcCertificate',
+      'vehicleInsurance'
     ];
+
     const missingFiles = requiredFiles.filter(field => !req.files?.[field]);
-    
+
     if (missingFiles.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required document images',
-        missingFiles
+        message: 'Please upload all required documents',
+        missingFiles: missingFiles.map(file => {
+          switch (file) {
+            case 'drivingLicense': return 'Driving License';
+            case 'rcCertificate': return 'RC Registration Certificate';
+            case 'vehicleInsurance': return 'Vehicle Insurance';
+            default: return file;
+          }
+        })
       });
     }
 
-    // Step 8: Validate and check plate number uniqueness
-    const plateNumber = req.body.plateNumber.toUpperCase();
-    const existingPlate = await Driver.findOne({ 
-      'vehicle.plateNumber': plateNumber
-    });
-    
-    if (existingPlate) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vehicle with this plate number is already registered'
-      });
-    }
+    const otp = generateOTP();
 
-    // Step 9: Generate OTP for email verification
-    const otp = generateOTP()
-
-    // Step 10: Create complete driver profile
     const driverData = {
-      // Basic info (Page 1)
       name: name.trim(),
       email: email.toLowerCase(),
       phone: formattedPhone,
       verificationCode: otp,
       otpExpiry: new Date(Date.now() + 10 * 60 * 1000),
-      
-      // Services (Page 2)
-      services,
-      
-      // Vehicle info (Page 3)
+      services: parsedServices,
       vehicle: {
-        type: req.body.vehicleType,
-        make: req.body.vehicleMake,
-        model: req.body.vehicleModel,
-        year: req.body.vehicleYear ? parseInt(req.body.vehicleYear) : undefined,
-        color: req.body.vehicleColor,
-        plateNumber,
-        capacity: {
-          passengers: req.body.passengerCapacity ? parseInt(req.body.passengerCapacity) : undefined,
-          weight: req.body.weightCapacity ? parseInt(req.body.weightCapacity) : undefined
-        }
+        type: vehicleType.toLowerCase(),
+        number: vehicleNumber.toUpperCase(),
+        ownerName: ownerName.trim()
       },
-      
-      // Documents (Page 4)
+
       documents: {
         drivingLicense: {
-          number: req.body.drivingLicenseNumber,
-          frontImage: req.files.drivingLicenseFront[0].path,
-          backImage: req.files.drivingLicenseBack[0].path,
-          expiryDate: req.body.drivingLicenseExpiry ? new Date(req.body.drivingLicenseExpiry) : null,
+          image: req.files.drivingLicense[0].path,
           isVerified: false
         },
-        vehicleRegistration: {
-          number: req.body.vehicleRegistrationNumber,
-          image: req.files.vehicleRegistrationImage[0].path,
-          expiryDate: req.body.vehicleRegistrationExpiry ? new Date(req.body.vehicleRegistrationExpiry) : null,
+        rcCertificate: {
+          image: req.files.rcCertificate[0].path,
           isVerified: false
         },
-        insurance: {
-          number: req.body.insuranceNumber,
-          image: req.files.insuranceImage[0].path,
-          expiryDate: req.body.insuranceExpiry ? new Date(req.body.insuranceExpiry) : null,
-          isVerified: false
-        },
-        aadhar: {
-          number: req.body.aadharNumber,
-          frontImage: req.files.aadharFront[0].path,
-          backImage: req.files.aadharBack[0].path,
+        vehicleInsurance: {
+          image: req.files.vehicleInsurance[0].path,
           isVerified: false
         }
       },
-      
-      // Registration status
-      verificationStatus: 'under_review',
+
+      verificationStatus: 'pending',
       registrationStep: 'completed',
-      isVerified: false // Email verification pending
-    }
+      isEmailVerified: false,
+      isApproved: false
+    };
 
-    // Step 11: Create driver
-    const driver = new Driver(driverData)
-    await driver.save()
+    const driver = new Driver(driverData);
+    await driver.save();
 
-    // Step 12: Send email verification OTP
-    await sendEmailVerificationOTP(driver.email, otp, driver.name)
+    await sendEmailVerificationOTP(driver.email, otp, driver.name);
 
-    // Step 13: Generate JWT token
-    const token = generateToken(driver._id, "driver")
+    const token = jwt.sign(
+      { id: driver._id, role: "driver" },
+      process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    )
 
-    // Step 14: Return success response
     res.status(201).json({
       success: true,
-      message: "Driver registration completed successfully. Please check your email for the verification code. Your application is now under review.",
-      data: { 
-        id: driver._id.toString(), 
-        token: token,
-        driver: {
-          id: driver._id,
-          name: driver.name,
-          email: driver.email,
-          phone: driver.phone,
-          services: driver.services,
-          vehicle: driver.vehicle,
-          verificationStatus: driver.verificationStatus,
-          registrationStep: driver.registrationStep,
-          isVerified: driver.isVerified
-        },
-        nextSteps: [
-          "Verify your email using the OTP sent to your email",
-          "Wait for admin approval (24-48 hours)",
-          "You will be notified once your application is approved"
-        ],
-        estimatedReviewTime: '24-48 hours'
+      message: "Driver registered successfully. Please check your email for the verification code.",
+      data: {
+        id: driver._id.toString(),
+        token: token
       }
-    })
+    });
 
   } catch (error) {
-    console.error('Complete driver registration error:', error)
-    
-    // Handle specific MongoDB duplicate key errors
+    console.error('Driver registration error:', error);
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
         success: false,
-        message: `${field} already exists`
+        message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`
       });
     }
-    
-    // Handle validation errors
+
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -294,14 +232,13 @@ exports.registerDriverComplete = async (req, res) => {
         errors: validationErrors
       });
     }
-    
+
     res.status(500).json({
       success: false,
-      message: "Server error during driver registration"
-    })
+      message: "Registration failed. Please try again."
+    });
   }
 }
-
 
 // Verify Email OTP
 exports.verifyEmailOtp = async (req, res) => {
@@ -414,7 +351,7 @@ const getNextStep = (registrationStep, verificationStatus) => {
   if (verificationStatus === 'approved') return 'registration_complete';
   if (verificationStatus === 'rejected') return 'resubmit_application';
   if (verificationStatus === 'under_review') return 'wait_for_approval';
-  
+
   switch (registrationStep) {
     case 'basic_info': return 'submit_for_verification';
     case 'service_selection': return 'submit_for_verification';

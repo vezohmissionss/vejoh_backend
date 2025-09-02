@@ -2,8 +2,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Ensure uploads folder exists
-const uploadDir = path.join(__dirname, "../uploads");
+const uploadDir = path.join(__dirname, "../uploads/drivers");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -11,26 +10,30 @@ if (!fs.existsSync(uploadDir)) {
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Optional: organize uploads by driver ID
-    const driverDir = req.user ? path.join(uploadDir, req.user._id.toString()) : uploadDir;
-    if (!fs.existsSync(driverDir)) {
-      fs.mkdirSync(driverDir, { recursive: true });
-    }
-    cb(null, driverDir);
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
   },
 });
 
-// File filter
+// File filter - allow only images and PDFs
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ["image/jpeg", "image/png", "application/pdf"];
-  if (allowedMimeTypes.includes(file.mimetype)) {
+  const allowedMimeTypes = [
+    "image/jpeg", 
+    "image/jpg",
+    "image/png", 
+    "application/pdf",
+  ];
+  const allowedExtensions = [".jpg", ".jpeg", ".png", ".pdf"];
+  const ext = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type. Only JPEG, PNG, PDF allowed."), false);
+    cb(new Error("Invalid file type. Only JPEG, PNG, and PDF files are allowed."), false);
   }
 };
 
@@ -38,29 +41,67 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // optional: max 10MB per file
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB max file size
+    files: 3, // Max 3 files
+  },
 });
 
-// Upload fields for all driver documents
-const allDocuments = upload.fields([
-  { name: "drivingLicenseFront", maxCount: 1 },
-  { name: "drivingLicenseBack", maxCount: 1 },
-  { name: "vehicleRegistrationImage", maxCount: 1 },
-  { name: "insuranceImage", maxCount: 1 },
-  { name: "aadharFront", maxCount: 1 },
-  { name: "aadharBack", maxCount: 1 },
+// Upload fields
+const driverDocuments = upload.fields([
+  { name: "drivingLicense", maxCount: 1 },
+  { name: "rcCertificate", maxCount: 1 },
+  { name: "vehicleInsurance", maxCount: 1 },
 ]);
 
-// Optional: handle multer errors in JSON format
+// Error handling middleware
 const handleUploadErrors = (err, req, res, next) => {
-  if (err instanceof multer.MulterError || err.message.includes("Invalid file type")) {
-    return res.status(400).json({ success: false, message: err.message });
+  if (err instanceof multer.MulterError) {
+    let message = "File upload error";
+    
+    switch (err.code) {
+      case "LIMIT_FILE_SIZE":
+        message = "File too large. Maximum size is 5MB per file.";
+        break;
+      case "LIMIT_FILE_COUNT":
+        message = "Too many files. Maximum 3 files allowed.";
+        break;
+      case "LIMIT_UNEXPECTED_FILE":
+        message = "Unexpected field. Please upload only the required documents.";
+        break;
+      default:
+        message = err.message;
+    }
+    
+    return res.status(400).json({ 
+      success: false, 
+      message,
+    });
   }
+  
+  if (err && err.message.includes("Invalid file type")) {
+    return res.status(400).json({ 
+      success: false, 
+      message: err.message,
+    });
+  }
+  
   next(err);
+};
+
+//cleanup uploaded files if something fails
+const cleanupFiles = (files) => {
+  if (!files) return;
+  Object.values(files).forEach((fileArr) => {
+    fileArr.forEach((file) => {
+      fs.unlink(file.path, () => {});
+    });
+  });
 };
 
 module.exports = {
   upload,
-  allDocuments,
-  handleUploadErrors
+  driverDocuments,
+  handleUploadErrors,
+  cleanupFiles,
 };
